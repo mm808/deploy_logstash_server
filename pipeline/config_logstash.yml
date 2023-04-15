@@ -1,0 +1,48 @@
+version: 0.2
+
+env:
+  variables:
+    TERRAFORM_VERSION: 1.2.8
+    ANSIBLE_DIRECTORY: infrastructure/ansible
+
+phases:
+  install:
+    commands:
+      - echo Starting install phase...
+      - pip install -Iv Jinja2==3.0.0
+      - add-apt-repository --yes --update ppa:ansible/ansible
+      - apt install -y ansible
+      - rm -rf /var/lib/apt/lists/*
+      - ansible --version
+
+  pre_build:
+    commands:
+      - |
+        if [ -f ~/.ssh/logstash_server_key ]; then
+          echo "Found existing key file and removing now."
+          rm -f~/.ssh/logstash_server_key
+        fi
+      - echo "Retrieving secret to create ssh key."
+      - chmod +x pipeline/get_ssh_key.sh
+      - ./pipeline/get_ssh_key.sh
+      - |
+        if [ -f ~/.ssh/logstash_server_key ]; then
+          echo "ssh file created - continuing..."
+          chmod 600 ~/.ssh/logstash_server_key
+          eval $(ssh-agent -s)
+          ssh-agent bash
+          ssh-add ~/.ssh/logstash_server_key
+          export ANSIBLE_HOST_KEY_CHECKING=False
+        else
+          echo "ssh file not created - fail!"
+          aws codebuild stop-build
+        fi
+  
+  build:
+    commands:
+      - cd $ANSIBLE_DIRECTORY
+      - ls -al
+      - ansible-playbook --extra-vars="env=$ENVIRONMENT" -i hostfile -u ubuntu playbook.yml
+    
+  # post_build:
+  #   commands:

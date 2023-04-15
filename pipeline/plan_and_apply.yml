@@ -1,0 +1,29 @@
+version: 0.2
+
+env:
+  variables:
+    TERRAFORM_VERSION: 1.2.8
+    TF_DIRECTORY: infrastructure/terraform
+
+phases:
+  install:
+    commands:
+      - echo Starting install phase...
+      - apt-get install -y wget
+      - wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+      - unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+      - sudo mv terraform /bin
+      - rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+
+  pre_build:
+    commands:
+      - cd ${TF_DIRECTORY}
+      - chmod +x tf_script.sh
+  
+  build:
+    commands:
+      - ./tf_script.sh $ENVIRONMENT $COMMIT "PLAN"
+
+  post_build:
+    commands:
+      - ./tf_script.sh $ENVIRONMENT $COMMIT "APPLY"

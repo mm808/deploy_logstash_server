@@ -1,0 +1,36 @@
+---
+- name: copy new conf file
+  vars:
+      env: "dev"
+  hosts: logstash_{{ env }}
+  
+  tasks:
+  # - name: Display paths of all environment related files
+  #   ansible.builtin.debug: msg={{ lookup('ansible.builtin.fileglob', 'files/{{ env }}*') }}
+
+# add new pipeline .conf files in with_items
+  - name: Copy new conf files
+    ansible.builtin.copy:
+      src: "{{ item }}"
+      dest: "/etc/logstash/conf.d/{{ item }}"
+      owner: logstash
+      group: logstash
+    with_items:
+      - "{{ env }}_company_cloudfront_logs.conf"
+    become: yes
+
+  - name: Copy new pipelines file
+    ansible.builtin.copy:
+      src: "{{ item }}"
+      dest: "/etc/logstash/pipelines.yml"
+      owner: logstash
+      group: logstash
+    with_items:
+      - "{{ env }}_pipelines.yml"
+    become: yes
+
+  - name: restart logstash service
+    ansible.builtin.service:
+      name: logstash
+      state: restarted
+    become: yes

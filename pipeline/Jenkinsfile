@@ -1,0 +1,149 @@
+pipeline {
+    agent any
+    parameters { 
+      string(name: 'COMMIT', defaultValue: '', description: 'Enter the commit hash or branch name that you would like to build & deploy.')
+      choice(name: 'ACTION', choices: ['deploy', 'update'], description: 'deploy is for creating a new server, use update to add .conf files to existing server')
+  }
+    stages {
+      
+      stage('Setup') {
+          environment{
+            BRANCH_NAME = "${GIT_BRANCH.split('/').size() > 1 ? GIT_BRANCH.split('/')[1..-1].join('/') : GIT_BRANCH}"
+          }
+          steps {
+            echo "# Stage Setup #"
+            echo "branch name is:${BRANCH_NAME}"
+            script {
+              if (BRANCH_NAME == "main") {
+                ENVIRONMENT = 'prod'
+                CODEBUILD_PROJECT = 'general-build-prod-company-io'
+              }
+              else if (BRANCH_NAME == "uat") {
+                ENVIRONMENT = 'uat'
+                CODEBUILD_PROJECT = 'general-build-stg-company-io'
+              }
+              else if (BRANCH_NAME == "qa") {
+                ENVIRONMENT = 'qa'
+                CODEBUILD_PROJECT = 'general-build-dev-company-io'
+              }
+              else {
+                ENVIRONMENT = 'dev'
+                CODEBUILD_PROJECT = 'general-build-dev-company-io'
+              }
+            }
+          echo "ENVIRONMENT = ${ENVIRONMENT}"
+          echo "CODEBUILD_PROJECT = ${CODEBUILD_PROJECT}"
+          echo "ACTION = ${ACTION}"
+          }
+      } // end stage Setup 
+       
+    stage('Plan and Apply') {
+      when { 
+        allOf {
+          expression {ENVIRONMENT != 'prod'} 
+          expression {"${ACTION}" == 'deploy'}
+        }
+      }
+      environment {
+        PLANSPEC_FILE = "pipeline/plan_and_apply.yml"
+      }
+      steps {
+        echo "# Stage Plan and Apply #"
+        // this will do plan and apply without waiting for approval to apply
+        script {
+          awsCodeBuild projectName: "${CODEBUILD_PROJECT}",
+            buildSpecFile: "${PLANSPEC_FILE}",
+            envVariables: "[ { ENVIRONMENT, $ENVIRONMENT }, { COMMIT, $COMMIT } ]",
+            credentialsType: 'keys',
+            region: 'us-east-1',
+            sourceControlType: 'jenkins'
+          }
+        }
+      } //end stage 'Plan and Apply'
+
+    stage('Plan') {
+      when { 
+        allOf {
+          expression {ENVIRONMENT == 'prod'}
+          expression {"${ACTION}" == 'deploy'} 
+        }
+      }
+      environment { 
+          BUILDSPEC_FILE = 'pipeline/plan_or_apply.yml'
+          TF_ACTION = 'PLAN'
+      }
+      steps {
+          echo "### starting stage Plan ###"
+          echo "CodeBuild project name: ${CODEBUILD_PROJECT}"
+          echo "BUILDSPEC_FILE: ${BUILDSPEC_FILE}"
+          script{
+            awsCodeBuild projectName: "${CODEBUILD_PROJECT}",
+              buildSpecFile: "${BUILDSPEC_FILE}",
+              envVariables: "[ { ENVIRONMENT, $ENVIRONMENT }, { COMMIT, $COMMIT }, { TF_ACTION, $TF_ACTION } ]",
+              credentialsType: 'keys',
+              region: 'us-east-1',
+              sourceControlType: 'jenkins'
+              }
+            }
+      } // end stage Plan
+    
+    stage('Prompt for input') {
+      when { 
+        expression {ENVIRONMENT == 'prod'}
+      }
+      steps {
+          timeout(unit: 'MINUTES', time: 5)
+              {
+              input message: "Please read the plan file before deployment and choose to proceed or abort"
+              }
+        }
+      } // end stage Prompt
+
+    stage('Apply') {
+      when { 
+        allOf {
+          expression {ENVIRONMENT == 'prod'} 
+          expression {"${ACTION}" == 'deploy'}
+        }
+      }
+      environment { 
+          BUILDSPEC_FILE = 'pipeline/plan_or_apply.yml'
+          TF_ACTION = 'APPLY'
+      }
+      steps {
+          echo "### starting stage Deploy ###"
+          echo "CodeBuild project name: ${CODEBUILD_PROJECT}"
+          echo "BUILDSPEC_FILE: ${BUILDSPEC_FILE}"
+          script{
+                  awsCodeBuild projectName: "${CODEBUILD_PROJECT}",
+                  buildSpecFile: "${BUILDSPEC_FILE}",
+                  envVariables: "[ { ENVIRONMENT, $ENVIRONMENT }, { COMMIT, $COMMIT }, { TF_ACTION, $TF_ACTION } ]",
+                  credentialsType: 'keys',
+                  region: 'us-east-1',
+                  sourceControlType: 'jenkins'
+              }
+          }
+      } // end stage Apply
+    stage('Update config') {
+      when {
+        expression {"${ACTION}" == 'update'}
+      }
+      environment { 
+        BUILDSPEC_FILE = 'pipeline/config_logstash.yml'
+      }
+      steps {
+        echo "### starting stage Config ###"
+        echo "CodeBuild project name: ${CODEBUILD_PROJECT}"
+        echo "BUILDSPEC_FILE: ${BUILDSPEC_FILE}"
+        script{
+          awsCodeBuild projectName: "${CODEBUILD_PROJECT}",
+          buildSpecFile: "${BUILDSPEC_FILE}",
+          envVariables: "[ { ENVIRONMENT, $ENVIRONMENT }, { COMMIT, $COMMIT } ]",
+          credentialsType: 'keys',
+          region: 'us-east-1',
+          sourceControlType: 'jenkins'
+            }
+      }
+    } //end stage Update config
+  } //end stages
+}
