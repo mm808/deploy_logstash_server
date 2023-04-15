@@ -1,11 +1,2 @@
 [logstash_dev]
 10.192.8.201
-
-[logstash_qa]
-100.0.1.167
-
-[logstash_uat]
-10.192.8.124
-
-[logstash_prod]
-10.192.11.233
