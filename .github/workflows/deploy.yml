@@ -1,0 +1,47 @@
+name: Deploy Logstasj Server
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deployment:
+    runs-on: ubuntu-latest
+    outputs:
+      repo_name: ${{ steps.workflow_info.outputs.repo_name }}
+      repo_branch: ${{ steps.workflow_info.outputs.repo_branch }}
+      vers: ${{ steps.workflow_info.outputs.vers }}
+      env_name: ${{ steps.workflow_info.outputs.env_name }}
+      job_status: ${{ steps.workflow_info.outputs.job_status }}
+
+    steps:
+      - name: Git clone the repository
+        uses: actions/checkout@v4
+
+      - name: Get workflow info
+        if: always()
+        id: workflow_info
+        run: |
+          set -eu
+          RUN_NUM=${GITHUB_RUN_NUMBER}
+          RUN_ID=${GITHUB_RUN_ID:0:3}
+          vers="${RUN_NUM}.${RUN_ID}"
+          echo "repo_name=${GITHUB_REPOSITORY}" >> $GITHUB_OUTPUT
+          echo "repo_branch=$(echo $GITHUB_REF | cut -d'/' -f3)" >> $GITHUB_OUTPUT
+          echo "vers=${vers}" >> $GITHUB_OUTPUT
+          echo "env_name=$(echo $GITHUB_REF | cut -d'/' -f3)" >> $GITHUB_OUTPUT
+          echo "job_status=${JOB_STATUS}" >> $GITHUB_OUTPUT
+        env:
+          JOB_STATUS: ${{ job.status }}
+
+  edit-badges:
+    if: always()
+    needs: deployment
+    uses: mm808/update_readme_badges/.github/workflows/edit_badges.yml@dev
+    with:
+      repo_name: ${{needs.deployment.outputs.repo_name}}
+      repo_branch: ${{needs.deployment.outputs.repo_branch}}
+      vers: ${{needs.deployment.outputs.vers}}
+      env_name: ${{needs.deployment.outputs.env_name}}
+      job_status: ${{needs.deployment.outputs.job_status}}

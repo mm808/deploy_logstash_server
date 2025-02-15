@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="135" height="30">
+  <rect width="135" height="30" fill="#555"/>
+  <text x="35" y="15" fill="#fff" font-family="Verdana" font-size="12" text-anchor="middle" dominant-baseline="middle">Last Build</text>
+  <rect x="75" width="70" height="30" fill="#c7b7b7"/>
+  <text x="105" y="15" fill="#fff" font-family="Verdana" font-size="12" text-anchor="middle" dominant-baseline="middle">{{STATUS}}</text>
+</svg>
